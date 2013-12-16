@@ -336,6 +336,9 @@ void core_udp_sendto(struct pxe_pvt_inode *socket, const void *data,
 
     memset(&udata, 0, sizeof(udata));
 
+    /* Re-use the existing local port number if any */
+    udata.StationPort = socket->net.efi.localport;
+
     memcpy(&udata.StationAddress, &IPInfo.myip, sizeof(IPInfo.myip));
     memcpy(&udata.SubnetMask, &IPInfo.netmask, sizeof(IPInfo.netmask));
     memcpy(&udata.RemoteAddress, &ip, sizeof(ip));
@@ -372,6 +375,21 @@ void core_udp_sendto(struct pxe_pvt_inode *socket, const void *data,
 
     /* Reset */
     cb_status = -1;
+
+    /*
+     * If this is the first time sending a packet, save the random local
+     * port number that the UDPv4 Protocol Driver picked for us. The TFTP
+     * protocol uses the local port number as the TID, and it needs to
+     * be consistent across connect()/disconnect() calls.
+     */
+    if (!socket->net.efi.localport) {
+	status = uefi_call_wrapper(udp->GetModeData, 5, udp,
+				   &udata, NULL, NULL, NULL);
+	if (status != EFI_SUCCESS)
+	    Print(L"Failed to get UDP mode data: %d\n", status);
+	else
+	    socket->net.efi.localport = udata.StationPort;
+    }
 
 close:
     uefi_call_wrapper(BS->CloseEvent, 1, token->Event);
