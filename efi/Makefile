@@ -68,8 +68,9 @@ $(OBJS): | $(OBJ)/$(ARCH)
 # The targets to build in this directory
 BTARGET  = syslinux.efi
 
-syslinux.so: $(OBJS) $(CORE_OBJS) $(LIB_OBJS)
-	$(LD) $(LDFLAGS) --strip-debug -o $@ $^ -lgnuefi -lefi
+syslinux.so: $(OBJS) $(CORE_OBJS) $(LIB_OBJS) $(CRT0) $(LIBEFI)
+	$(LD) $(LDFLAGS) --strip-debug -o $@ $(OBJS) $(CORE_OBJS) $(LIB_OBJS) \
+		$(LDLIBSEFI)
 
 # We need to rename the .hash section because the EFI firmware
 # linker really doesn't like it.
