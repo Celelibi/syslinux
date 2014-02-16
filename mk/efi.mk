@@ -44,9 +44,16 @@ SFLAGS     = $(GCCOPT) $(GCCWARN) $(ARCHOPT) \
 	     -nostdinc -iwithprefix include \
 	     -I$(com32)/libutil/include -I$(com32)/include -I$(com32)/include/sys $(GPLINCLUDE)
 
-LIBEFI = $(objdir)/lib/libefi.a
+LIBEFI = $(LIBDIR)/libefi.a $(LIBDIR)/libgnuefi.a
+LDLIBSEFI = $(patsubst $(LIBDIR)/lib%.a,-l%,$(LIBEFI))
 
-$(LIBEFI):
+# The empty commands are needed in order to force make to check the files date
+$(LIBEFI): gnuefi ;
+$(CRT0) $(LDSCRIPT): gnuefi ;
+$(EFIINC)/%.h $(EFIINC)/protocol/%.h $(EFIINC)/$(EFI_SUBARCH)/%.h: gnuefi ;
+
+.PHONY: gnuefi
+gnuefi:
 	@echo Building gnu-efi for $(EFI_SUBARCH)
 	$(topdir)/efi/check-gnu-efi.sh $(EFI_SUBARCH) $(objdir)
 
@@ -55,11 +62,15 @@ $(LIBEFI):
 %.o: %.c
 
 .PRECIOUS: %.o
-%.o: %.S $(LIBEFI)
+%.o: %.S
 	$(CC) $(SFLAGS) -c -o $@ $<
 
-.PRECIOUS: %.o
-%.o: %.c $(LIBEFI)
+# efi/*.c depends on some headers installed by gnuefi, so here we add two
+# dependencies that are always installed. And since gnu-efi is installed as a
+# whole by check-gnu-efi.sh, those two headers are always a good timestamp
+# marker.
+.SECONDARY: $(EFIINC)/efi.h $(EFIINC)/efilib.h
+%.o: %.c $(EFIINC)/efi.h $(EFIINC)/efilib.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 #%.efi: %.so
