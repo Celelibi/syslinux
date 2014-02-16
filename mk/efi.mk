@@ -10,6 +10,7 @@ core = $(topdir)/core
 GCCOPT := $(call gcc_ok,-fno-stack-protector,)
 EFIINC = $(objdir)/include/efi
 LIBDIR  = $(objdir)/lib
+EFIDIR = $(topdir)/gnu-efi/gnu-efi-3.0
 
 ifeq ($(ARCH),i386)
 	ARCHOPT = -m32 -march=i386
@@ -55,7 +56,13 @@ $(EFIINC)/%.h $(EFIINC)/protocol/%.h $(EFIINC)/$(EFI_SUBARCH)/%.h: gnuefi ;
 .PHONY: gnuefi
 gnuefi:
 	@echo Building gnu-efi for $(EFI_SUBARCH)
-	$(topdir)/efi/check-gnu-efi.sh $(EFI_SUBARCH) $(objdir)
+	cd $(topdir) && git submodule update --init
+	mkdir -p "$(objdir)/gnu-efi"
+	MAKEFLAGS= make SRCDIR="$(EFIDIR)" TOPDIR="$(EFIDIR)" \
+		ARCH=$(EFI_SUBARCH) -f "$(EFIDIR)/Makefile"
+	MAKEFLAGS= make SRCDIR="$(EFIDIR)" TOPDIR="$(EFIDIR)" \
+		ARCH=$(EFI_SUBARCH) PREFIX="$(objdir)" \
+		-f "$(EFIDIR)/Makefile" install
 
 %.o: %.S	# Cancel old rule
 
