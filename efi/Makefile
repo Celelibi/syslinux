@@ -60,17 +60,17 @@ DATE    := $(shell sh $(SRC)/../gen-id.sh $(VERSION) $(HEXDATE))
 endif
 CFLAGS		+= -DDATE_STR='"$(DATE)"'
 
-.PHONY: subdirs
-subdirs:
-	mkdir -p $(ARCH)
+$(OBJ)/$(ARCH):
+	mkdir -p $@
 
-$(OBJS): subdirs
+$(OBJS): | $(OBJ)/$(ARCH)
 
 # The targets to build in this directory
 BTARGET  = syslinux.efi
 
-syslinux.so: $(OBJS) $(CORE_OBJS) $(LIB_OBJS)
-	$(LD) $(LDFLAGS) --strip-debug -o $@ $^ -lgnuefi -lefi
+syslinux.so: $(OBJS) $(CORE_OBJS) $(LIB_OBJS) $(CRT0) $(LIBEFI)
+	$(LD) $(LDFLAGS) --strip-debug -o $@ $(OBJS) $(CORE_OBJS) $(LIB_OBJS) \
+		$(LDLIBSEFI)
 
 # We need to rename the .hash section because the EFI firmware
 # linker really doesn't like it.
@@ -101,7 +101,11 @@ tidy dist:
 	rm -f *.so *.o wrapper
 	find . \( -name \*.o -o -name \*.a -o -name .\*.d -o -name \*.tmp \) -print0 | \
 		xargs -0r rm -f
-	$(topdir)/efi/clean-gnu-efi.sh $(EFI_SUBARCH) $(objdir)
+	if [ -d ../gnu-efi ]; then \
+		MAKEFLAGS= make -C ../gnu-efi SRCDIR="$(EFIDIR)" \
+			TOPDIR="$(EFIDIR)" -f "$(EFIDIR)/Makefile" \
+			ARCH=$(EFI_SUBARCH) clean; \
+	fi
 
 clean: tidy
 
