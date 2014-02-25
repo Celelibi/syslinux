@@ -450,7 +450,7 @@ struct dt_desc {
 	uint64_t *base;
 } __packed;
 
-struct dt_desc gdt = { 0x800, (uint64_t *)0 };
+struct dt_desc gdt = { 0x7ff, (uint64_t *)0 };
 struct dt_desc idt = { 0, 0 };
 
 static inline EFI_MEMORY_DESCRIPTOR *
@@ -852,12 +852,12 @@ static int build_gdt(void)
 	EFI_STATUS status;
 
 	/* Allocate gdt consistent with the alignment for architecture */
-	status = emalloc(gdt.limit, __SIZEOF_POINTER__ , (EFI_PHYSICAL_ADDRESS *)&gdt.base);
+	status = emalloc(gdt.limit + 1, __SIZEOF_POINTER__ , (EFI_PHYSICAL_ADDRESS *)&gdt.base);
 	if (status != EFI_SUCCESS) {
 		printf("Failed to allocate memory for GDT, bailing out\n");
 		return -1;
 	}
-	memset(gdt.base, 0x0, gdt.limit);
+	memset(gdt.base, 0x0, gdt.limit + 1);
 
 	/*
          * 4Gb - (0x100000*0x1000 = 4Gb)

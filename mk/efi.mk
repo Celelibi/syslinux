@@ -10,6 +10,7 @@ core = $(topdir)/core
 GCCOPT := $(call gcc_ok,-fno-stack-protector,)
 EFIINC = $(objdir)/include/efi
 LIBDIR  = $(objdir)/lib
+EFIDIR = $(topdir)/gnu-efi/gnu-efi-3.0
 
 ifeq ($(ARCH),i386)
 	ARCHOPT = -m32 -march=i386
@@ -44,22 +45,39 @@ SFLAGS     = $(GCCOPT) $(GCCWARN) $(ARCHOPT) \
 	     -nostdinc -iwithprefix include \
 	     -I$(com32)/libutil/include -I$(com32)/include -I$(com32)/include/sys $(GPLINCLUDE)
 
-LIBEFI = $(objdir)/lib/libefi.a
+LIBEFI = $(LIBDIR)/libefi.a $(LIBDIR)/libgnuefi.a
+LDLIBSEFI = $(patsubst $(LIBDIR)/lib%.a,-l%,$(LIBEFI))
 
-$(LIBEFI):
+# The empty commands are needed in order to force make to check the files date
+$(LIBEFI): gnuefi ;
+$(CRT0) $(LDSCRIPT): gnuefi ;
+$(EFIINC)/%.h $(EFIINC)/protocol/%.h $(EFIINC)/$(EFI_SUBARCH)/%.h: gnuefi ;
+
+.PHONY: gnuefi
+gnuefi:
 	@echo Building gnu-efi for $(EFI_SUBARCH)
-	$(topdir)/efi/check-gnu-efi.sh $(EFI_SUBARCH) $(objdir)
+	cd $(topdir) && git submodule update --init
+	mkdir -p "$(objdir)/gnu-efi"
+	MAKEFLAGS= make SRCDIR="$(EFIDIR)" TOPDIR="$(EFIDIR)" \
+		ARCH=$(EFI_SUBARCH) -f "$(EFIDIR)/Makefile"
+	MAKEFLAGS= make SRCDIR="$(EFIDIR)" TOPDIR="$(EFIDIR)" \
+		ARCH=$(EFI_SUBARCH) PREFIX="$(objdir)" \
+		-f "$(EFIDIR)/Makefile" install
 
 %.o: %.S	# Cancel old rule
 
 %.o: %.c
 
 .PRECIOUS: %.o
-%.o: %.S $(LIBEFI)
+%.o: %.S
 	$(CC) $(SFLAGS) -c -o $@ $<
 
-.PRECIOUS: %.o
-%.o: %.c $(LIBEFI)
+# efi/*.c depends on some headers installed by gnuefi,
+# so let's depend on one header, and the others will come along.
+# Note: Do NOT depend on gnuefi phony target, this would force all the .c to be
+# rebuilt every time.
+.SECONDARY: $(EFIINC)/efi.h $(EFIINC)/efilib.h
+%.o: %.c $(EFIINC)/efi.h $(EFIINC)/efilib.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 #%.efi: %.so
