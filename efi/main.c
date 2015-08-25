@@ -1001,19 +1001,96 @@ static int handle_ramdisks(struct linux_header *hdr,
 	return 0;
 }
 
+/*
+ * Try to use the given map buffer when calling GetMemoryMap.
+ * Reallocate the buffer if if it's too small.
+ * Make sure there is always at least adddesc free descriptors in the buffer.
+ * Always set *allocsize to the size of the buffer.
+ */
+static EFI_MEMORY_DESCRIPTOR *
+get_memory_map_realloc(EFI_MEMORY_DESCRIPTOR *map, UINTN *allocsize,
+		       UINTN *nr_entries, UINTN *key, UINTN *desc_sz,
+		       UINT32 *desc_ver, UINTN nfreedesc)
+{
+	EFI_STATUS status;
+	UINTN size, doubleaddsize, constaddsize;
+
+	size = *allocsize;
+
+	/*
+	 * First try with the given buffer.
+	 * Also get the minimal buffer size needed and the size of a single
+	 * memory descriptor.
+	 */
+	status = uefi_call_wrapper(BS->GetMemoryMap, 5, &size, map, key,
+	                           desc_sz, desc_ver);
+
+	constaddsize = nfreedesc * *desc_sz;
+	doubleaddsize = *desc_sz;
+
+	while (status == EFI_BUFFER_TOO_SMALL ||
+	       (status == EFI_SUCCESS && size + constaddsize > *allocsize)) {
+		if (map)
+			FreePool(map);
+
+		doubleaddsize *= 2;
+		size += doubleaddsize + constaddsize;
+		*allocsize = size;
+		map = AllocatePool(size);
+
+		status = uefi_call_wrapper(BS->GetMemoryMap, 5, &size, map, key,
+		                           desc_sz, desc_ver);
+	}
+
+	if (status == EFI_SUCCESS) {
+		*nr_entries = size / *desc_sz;
+		return map;
+	}
+
+	if (map)
+		FreePool(map);
+	return NULL;
+}
+
 static int exit_boot(struct boot_params *bp)
 {
 	struct e820_entry *e820buf, *e;
 	EFI_MEMORY_DESCRIPTOR *map;
 	EFI_STATUS status;
 	uint32_t e820_type;
-	UINTN i, nr_entries, key, desc_sz;
+	UINTN i, nr_entries, key, desc_sz, allocsize, addsize;
 	UINT32 desc_ver;
+	int retry;
 
-	/* Build efi memory map */
-	map = get_memory_map(&nr_entries, &key, &desc_sz, &desc_ver);
-	if (!map)
+	/*
+	 * Build efi memory map and call ExitBootServices as soon after as
+	 * possible. Some implementations need two calls to ExitBootServices.
+	 */
+
+	map = NULL;
+	allocsize = 0;
+	addsize = 4;
+	retry = 0;
+	do {
+		map = get_memory_map_realloc(map, &allocsize, &nr_entries, &key,
+		                             &desc_sz, &desc_ver, addsize);
+		if (!map)
+			return -1;
+
+		/* Only request additional memory on the first try. */
+		addsize = 0;
+
+		status = uefi_call_wrapper(BS->ExitBootServices, 2,
+		                           image_handle, key);
+		retry++;
+	} while (status != EFI_SUCCESS && retry < 2);
+
+	if (status != EFI_SUCCESS) {
+		printf("Failed to exit boot services: 0x%016lx\n", status);
+		FreePool(map);
 		return -1;
+	}
+
 
 	bp->efi.memmap = (uint32_t)(unsigned long)map;
 	bp->efi.memmap_size = nr_entries * desc_sz;
@@ -1087,13 +1164,6 @@ static int exit_boot(struct boot_params *bp)
 	}
 
 	bp->e820_entries = e - e820buf;
-
-	status = uefi_call_wrapper(BS->ExitBootServices, 2, image_handle, key);
-	if (status != EFI_SUCCESS) {
-		printf("Failed to exit boot services: 0x%016lx\n", status);
-		FreePool(map);
-		return -1;
-	}
 
 	return 0;
 }
