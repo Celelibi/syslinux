@@ -32,22 +32,6 @@ int reset_pxe(void)
     return 0;
 }
 
-#define DNS_MAX_SERVERS 4		/* Max no of DNS servers */
-uint32_t dns_server[DNS_MAX_SERVERS] = {0, };
-
-__export uint32_t dns_resolv(const char *name)
-{
-    /*
-     * Return failure on an empty input... this can happen during
-     * some types of URL parsing, and this is the easiest place to
-     * check for it.
-     */
-    if (!name || !*name)
-	return 0;
-
-    return 0;
-}
-
 int pxe_init(bool quiet)
 {
     EFI_HANDLE *handles;
