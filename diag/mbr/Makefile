@@ -25,7 +25,7 @@ all:	handoff.bin
 	$(CC) $(MAKEDEPS) $(SFLAGS) -Wa,-a=$*.lst -c -o $@ $<
 
 .PRECIOUS: %.elf
-%.elf: %.o $(mbrdir)/mbr.ld
+%.elf: %.o $(mbrdir)/$(ARCH)/mbr.ld
 	$(LD) $(LDFLAGS) -T $(mbrdir)/$(ARCH)/mbr.ld -e _start -o $@ $<
 
 %.bin: %.elf $(mbrdir)/checksize.pl
